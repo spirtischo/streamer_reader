@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="lv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Streamer Reader</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;700;800&display=swap">
+<style>
+  :root {
+    --night:#0d0f1c; --panel:#151831; --panel2:#1c2040; --line:#2b3160;
+    --text:#edeeff; --muted:#9aa0cf; --accent:#7c6cff; --accent2:#a99dff; --hot:#ff4f7b; --ok:#3be0b0;
+    --display:"Sora","Segoe UI",system-ui,sans-serif; --body:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    color-scheme: dark;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--night);color:var(--text);font:15px/1.5 var(--body);display:flex;flex-direction:column}
+  button,input,select{font:inherit;color:inherit}
+  :focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
+
+  /* top bar */
+  .top{display:flex;align-items:center;gap:16px;padding:14px 24px;border-bottom:1px solid var(--line);background:var(--panel)}
+  .brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+  .brand svg{flex:none}
+  .brand h1{margin:0;font:800 22px/1 var(--display);letter-spacing:-.01em}
+  .brand p{margin:3px 0 0;color:var(--muted);font-size:13px}
+  .pill{display:inline-flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);font-size:13px;max-width:46ch}
+  .pill i{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:none}
+  .pill.ok i{background:var(--ok);animation:pulse 1.8s ease-in-out infinite}
+  .pill.bad i{background:var(--hot)}
+  .pill span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  @keyframes pulse{50%{box-shadow:0 0 0 6px #3be0b02a}}
+  .btn{border:1px solid var(--line);background:var(--panel2);padding:9px 16px;border-radius:10px;cursor:pointer;font-weight:600}
+  .btn:hover{border-color:var(--accent2)}
+
+  /* layout */
+  .app{flex:1;min-height:0;display:grid;grid-template-columns:460px 1fr}
+  aside{border-right:1px solid var(--line);padding:28px 30px 36px;overflow-y:auto;display:flex;flex-direction:column;gap:24px;background:var(--panel)}
+  main{min-width:0;display:flex;flex-direction:column}
+  @media (max-width:880px){.app{grid-template-columns:1fr;grid-template-rows:auto minmax(420px,1fr)} aside{border-right:0;border-bottom:1px solid var(--line)} .top{flex-wrap:wrap}}
+
+  /* controls */
+  .step{display:flex;flex-direction:column;gap:16px;padding:22px;background:var(--panel2);border:1px solid var(--line);border-radius:16px}
+  .step>b{font:800 16px var(--display);color:var(--text)}
+  label.f{display:flex;flex-direction:column;gap:9px;font-size:14px;color:var(--muted)}
+  input[type=text],input[type=number],select{width:100%;background:var(--night);border:1px solid var(--line);border-radius:10px;padding:13px 14px;color:var(--text)}
+  input[type=text]{font-size:17px}
+  .row{display:flex;gap:10px;align-items:end}
+  .stepper{display:flex;align-items:stretch;gap:0}
+  .stepper input{text-align:center;font:800 22px var(--display);border-radius:0;width:90px;padding:8px 4px;-moz-appearance:textfield}
+  .stepper input::-webkit-inner-spin-button{display:none}
+  .stepper button{width:44px;border:1px solid var(--line);background:var(--panel2);font-size:20px;cursor:pointer}
+  .stepper button:first-child{border-radius:10px 0 0 10px}.stepper button:last-child{border-radius:0 10px 10px 0}
+  .hint{margin:0;font-size:13.5px;color:var(--muted)}
+  input[type=range]{width:100%;accent-color:var(--accent);padding:0}
+  .go{width:100%;padding:18px;border:0;border-radius:12px;background:var(--accent);color:#fff;font:800 17px var(--display);cursor:pointer;transition:transform .12s}
+  .go:hover{transform:translateY(-1px)} .go.stop{background:var(--hot)}
+  .switch{display:flex;align-items:center;gap:12px;cursor:pointer;font-weight:600}
+  .switch input{position:absolute;opacity:0}
+  .track{width:46px;height:26px;border-radius:999px;background:var(--line);position:relative;transition:background .15s;flex:none}
+  .track::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .15s}
+  .switch input:checked+.track{background:var(--accent)} .switch input:checked+.track::after{transform:translateX(20px)}
+  .switch input:focus-visible+.track{outline:2px solid var(--accent2);outline-offset:2px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .btn.big{padding:13px 16px}
+  .stackc{display:flex;flex-direction:column;gap:20px}
+  details{border:1px solid var(--line);border-radius:16px;padding:0 22px}
+  summary{cursor:pointer;padding:18px 0;font-weight:700}
+  details .inner{display:flex;flex-direction:column;gap:22px;padding:6px 0 22px}
+  .check{display:flex;align-items:center;gap:8px;color:var(--text);font-size:14px}
+
+  /* feed */
+  .now{display:flex;align-items:center;gap:16px;padding:18px 24px;border-bottom:1px solid var(--line);min-height:84px}
+  .eq{display:flex;align-items:flex-end;gap:4px;height:34px;flex:none}
+  .eq span{width:5px;height:100%;border-radius:3px;background:var(--line);transform:scaleY(.25);transform-origin:bottom}
+  .now.on .eq span{background:var(--accent);animation:eq .9s ease-in-out infinite}
+  .now.on .eq span:nth-child(2){animation-delay:-.2s}.now.on .eq span:nth-child(3){animation-delay:-.45s}
+  .now.on .eq span:nth-child(4){animation-delay:-.1s}.now.on .eq span:nth-child(5){animation-delay:-.6s}
+  @keyframes eq{0%,100%{transform:scaleY(.25)}50%{transform:scaleY(1)}}
+  .now div{min-width:0}
+  .now small{color:var(--muted);display:block}
+  .now strong{font:700 19px/1.3 var(--display);display:block;overflow-wrap:anywhere}
+  .stats{display:flex;gap:10px;margin-left:auto;flex-wrap:wrap}
+  .stat{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:6px 12px;text-align:center;min-width:86px}
+  .stat b{display:block;font:800 18px var(--display)} .stat small{color:var(--muted);font-size:11.5px;display:block}
+  #feed{flex:1;overflow-y:auto;padding:16px 24px;display:flex;flex-direction:column;gap:8px}
+  .msg{display:flex;gap:12px;align-items:baseline;padding:10px 14px;border-radius:12px;background:var(--panel);border:1px solid transparent;max-width:90ch}
+  .msg.speaking{border-color:var(--accent);background:var(--panel2)}
+  .lv{flex:none;font:800 12px var(--display);padding:3px 9px;border-radius:999px;background:var(--accent);color:#fff}
+  .lv.hi{background:var(--hot)}
+  .msg .user{font-weight:700;margin-right:6px}
+  .msg .txt{overflow-wrap:anywhere}
+  .welcome{margin:auto;max-width:520px;text-align:center;color:var(--muted)}
+  .welcome h2{font:800 26px var(--display);color:var(--text);margin:0 0 8px}
+  .welcome ol{text-align:left;display:inline-block;margin:14px 0 0;padding-left:22px}
+  .welcome li{margin:6px 0}
+
+  dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:18px;padding:0;max-width:640px;width:calc(100% - 32px)}
+  dialog::backdrop{background:#05060dcc}
+  .dlg{padding:26px 28px;max-height:80vh;overflow-y:auto}
+  .dlg h2{font:800 24px var(--display);margin:0 0 4px}
+  .dlg h3{font:700 15px var(--display);color:var(--accent2);margin:22px 0 6px}
+  .dlg code{background:var(--night);border:1px solid var(--line);border-radius:6px;padding:1px 7px;font-size:13.5px}
+  .dlg li,.dlg p{margin:6px 0}
+  .dlg .close{float:right}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="11" fill="#7c6cff"/><g fill="#fff"><rect x="8" y="16" width="4" height="8" rx="2"/><rect x="14.5" y="10" width="4" height="20" rx="2"/><rect x="21" y="13" width="4" height="14" rx="2"/><rect x="27.5" y="17" width="4" height="6" rx="2"/></g></svg>
+    <div><h1>Streamer Reader</h1><p>Nolasa skaļi tikai tos Kick čata skatītājus, kuriem ir pietiekami augsts līmenis</p></div>
+  </div>
+  <div class="pill" id="pill" role="status"><i></i><span id="state">Nav savienots</span></div>
+  <button class="btn" id="help">Kā lietot</button>
+</header>
+
+<div class="app">
+  <aside>
+    <section class="step">
+      <b>1. Kanāls</b>
+      <label class="f">Straumētāja kanāla nosaukums
+        <input type="text" id="slug" placeholder="piemēram, xqc" autocomplete="off" autocapitalize="off" spellcheck="false">
+      </label>
+    </section>
+
+    <section class="step">
+      <b>2. Kuru lasīt?</b>
+      <label class="f" for="minLevel">Lasīt tikai skatītājus ar Kick līmeni vismaz</label>
+      <div class="stepper">
+        <button type="button" id="minus" aria-label="Samazināt līmeni">−</button>
+        <input id="minLevel" type="number" min="1" value="30">
+        <button type="button" id="plus" aria-label="Palielināt līmeni">+</button>
+      </div>
+      <p class="hint">Visi pārējie čata ziņojumi tiek ignorēti.</p>
+    </section>
+
+    <section class="step">
+      <b>3. Balss</b>
+      <label class="f">Balss <select id="voice"></select></label>
+      <div class="stackc">
+        <label class="f">Ātrums <input id="rate" type="range" min="0.7" max="2" step="0.1" value="1.1"></label>
+        <label class="f">Skaļums <input id="volume" type="range" min="0" max="1" step="0.05" value="1"></label>
+      </div>
+      <label class="switch"><input type="checkbox" id="speak" checked><span class="track"></span>Balss ir ieslēgta</label>
+      <div class="two">
+        <button class="btn big" id="test" type="button">Pārbaudīt balsi</button>
+        <button class="btn big" id="skip" type="button">Izlaist ziņu</button>
+      </div>
+    </section>
+
+    <button class="go" id="go" type="button">Sākt lasīšanu</button>
+
+    <details id="adv">
+      <summary>Papildu iestatījumi</summary>
+      <div class="inner">
+        <label class="f">Kuru nozīmīti pārbaudīt
+          <select id="badgeType">
+            <option value="level" selected>Kick līmenis (skatīšanās laiks)</option>
+            <option value="subscriber">Abonēšanas mēneši</option>
+            <option value="sub_gifter">Abonementu dāvinātājs</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" id="sayName" checked> Pirms ziņas nosaukt lietotājvārdu</label>
+        <label class="f">Maksimālais rakstzīmju skaits vienā ziņā <input id="maxChars" type="number" min="20" value="200"></label>
+        <label class="f">Cik ziņas drīkst gaidīt rindā (vecākās tiek izmestas) <input id="maxQueue" type="number" min="1" value="4"></label>
+        <label class="f">Čata istabas ID (tikai ja automātiski neatrod) <input id="roomId" type="text" inputmode="numeric" placeholder="nav obligāts" autocomplete="off"></label>
+        <button class="btn" id="clear" type="button">Notīrīt sarakstu</button>
+      </div>
+    </details>
+  </aside>
+
+  <main>
+    <div class="now" id="now">
+      <div class="eq" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+      <div><small id="nowLabel">Tagad lasa</small><strong id="nowText">Pagaidām nekas netiek lasīts</strong></div>
+      <div class="stats">
+        <div class="stat"><b id="cSeen">0</b><small>Redzētas ziņas</small></div>
+        <div class="stat"><b id="cBadge">0</b><small>Ar līmeņa nozīmīti</small></div>
+        <div class="stat"><b id="cRead">0</b><small>Nolasītas</small></div>
+      </div>
+    </div>
+    <div id="feed" aria-live="polite">
+      <div class="welcome" id="welcome">
+        <h2>Gatavs darbam</h2>
+        <p>Ieraksti kanāla nosaukumu un spied <b>Sākt lasīšanu</b>.</p>
+        <ol><li>Ieraksti kanāla nosaukumu</li><li>Izvēlies minimālo līmeni</li><li>Izvēlies latviešu balsi un spied sākt</li></ol>
+        <p><button class="btn" id="help2" type="button">Skatīt pilnu pamācību</button></p>
+      </div>
+    </div>
+  </main>
+</div>
+
+<dialog id="dlg">
+  <div class="dlg">
+    <button class="btn close" id="closeDlg" type="button">Aizvērt</button>
+    <h2>Kā lietot Streamer Reader</h2>
+    <p style="color:var(--muted)">Programma klausās Kick čatu un nolasa skaļi tikai to skatītāju ziņas, kuriem ir tavs izvēlētais līmenis vai augstāks.</p>
+
+    <h3>Pirmā reize (jāizdara tikai vienreiz)</h3>
+    <ol>
+      <li>Instalē <b>Node.js 22 vai jaunāku</b> no <code>nodejs.org</code> (zaļā poga LTS).</li>
+      <li>Ieliec failus <code>server.js</code> un <code>index.html</code> vienā mapē.</li>
+    </ol>
+
+    <h3>Katru reizi, kad straumē</h3>
+    <ol>
+      <li><b>Mac:</b> atver Terminal, ieraksti <code>cd </code> (ar atstarpi), ievelc mapi Terminal logā un spied Enter.<br><b>Windows:</b> atver mapi, adreses joslā ieraksti <code>cmd</code> un spied Enter.</li>
+      <li>Ieraksti <code>node server.js</code> un spied Enter. Šo logu neaizver, kamēr straumē.</li>
+      <li>Pārlūkā <b>Chrome</b> atver <code>http://localhost:3000</code></li>
+      <li>Ieraksti kanāla nosaukumu, iestati līmeni un spied <b>Sākt lasīšanu</b>.</li>
+    </ol>
+
+    <h3>Latviešu balss</h3>
+    <p>Izvēlnē <b>Balss</b> izvēlies <b>Latviešu balss (tiešsaistē)</b>. Tā darbojas Chrome pārlūkā, bet vajadzīgs internets. Microsoft Edge pārlūkā ir arī dabiskākas balsis Everita un Nils. Spied <b>Pārbaudīt balsi</b>, lai noklausītos.</p>
+
+    <h3>Svarīgi zināt</h3>
+    <ul>
+      <li>Kick līmeņa nozīmīte pēc noklusējuma ir izslēgta. Skatītāji, kas to nav ieslēguši (Čats → Iestatījumi → Identity → Global badges), netiks nolasīti, jo programma viņu līmeni neredz.</li>
+      <li>Ja čatā ir daudz ziņu, vecākās gaidošās tiek izmestas, lai balss neatpaliek. To var mainīt sadaļā Papildu iestatījumi.</li>
+      <li>Lai skatītāji dzird balsi, straumes programmai jāuztver datora skaņa. OBS iebūvētais pārlūks bieži neatbalsta balsi, tāpēc izmanto parasto Chrome logu.</li>
+      <li>Lai apturētu programmu, terminālī nospied <code>Ctrl + C</code>.</li>
+    </ul>
+
+    <h3>Ja kaut kas nedarbojas</h3>
+    <ul>
+      <li><b>Skaitītājs „Redzētas ziņas” nekustas:</b> pārbaudi kanāla nosaukumu un to, vai terminālis vēl darbojas.</li>
+      <li><b>Neatrod čata istabas ID:</b> atver <code>https://kick.com/api/v2/channels/KANĀLS</code>, atrodi vārdu <code>chatroom</code> un skaitli pie <code>id</code>, un ieraksti to Papildu iestatījumos.</li>
+      <li><b>„Ar līmeņa nozīmīti” paliek 0:</b> čatā neviens vēl nerāda līmeņa nozīmīti vai Kick ir mainījis datu formātu.</li>
+      <li><b>Latviešu balss klusē:</b> pārbaudi internetu vai pamēģini Microsoft Edge.</li>
+    </ul>
+  </div>
+</dialog>
+
+<script>
+const $ = id => document.getElementById(id);
+const NET = "net-lv";
+const synth = window.speechSynthesis;
+let voices = [], queue = [], speaking = false, currentAudio = null, currentDone = null;
+let es = null, running = false, seen = 0, shown = 0, withBadge = 0;
+
+/* ---------- saglabātie iestatījumi ---------- */
+const SAVE = ["slug", "minLevel", "rate", "volume", "maxChars", "maxQueue", "badgeType"];
+function loadSaved() { try { SAVE.forEach(k => { const v = localStorage.getItem("sr_" + k); if (v !== null) $(k).value = v; }); } catch (e) {} }
+function save() { try { SAVE.forEach(k => localStorage.setItem("sr_" + k, $(k).value)); } catch (e) {} }
+loadSaved();
+SAVE.forEach(k => $(k).addEventListener("change", save));
+
+/* ---------- statuss ---------- */
+function setState(text, cls) { $("state").textContent = text; $("pill").className = "pill " + (cls || ""); }
+function updateCounts() { $("cSeen").textContent = seen; $("cBadge").textContent = withBadge; $("cRead").textContent = shown; }
+
+/* ---------- pamācība ---------- */
+const dlg = $("dlg");
+const openHelp = () => dlg.showModal();
+$("help").onclick = openHelp; $("help2").onclick = openHelp; $("closeDlg").onclick = () => dlg.close();
+dlg.addEventListener("click", e => { if (e.target === dlg) dlg.close(); });
+try { if (!localStorage.getItem("sr_seenHelp")) { localStorage.setItem("sr_seenHelp", "1"); openHelp(); } } catch (e) {}
+
+/* ---------- līmeņa skaitītājs ---------- */
+$("minus").onclick = () => { $("minLevel").value = Math.max(1, (Number($("minLevel").value) || 1) - 1); save(); };
+$("plus").onclick = () => { $("minLevel").value = (Number($("minLevel").value) || 0) + 1; save(); };
+
+/* ---------- balsis ---------- */
+function isLatvian() {
+  const val = $("voice").value;
+  if (val === NET) return true;
+  const v = voices[Number(val)];
+  return !!(v && v.lang.toLowerCase().startsWith("lv"));
+}
+function loadVoices() {
+  voices = synth ? synth.getVoices() : [];
+  const sel = $("voice"), keep = sel.value;
+  sel.innerHTML = "";
+  const lv = document.createElement("optgroup"); lv.label = "Latviešu";
+  const other = document.createElement("optgroup"); other.label = "Citas valodas";
+  const net = document.createElement("option"); net.value = NET; net.textContent = "Latviešu balss (tiešsaistē, der Chrome)"; lv.appendChild(net);
+  voices.forEach((v, i) => {
+    const o = document.createElement("option"); o.value = i; o.textContent = `${v.name} (${v.lang})`;
+    (v.lang.toLowerCase().startsWith("lv") ? lv : other).appendChild(o);
+  });
+  sel.appendChild(lv); if (other.children.length) sel.appendChild(other);
+  const has = [...sel.options].some(o => o.value === keep);
+  if (keep && has) sel.value = keep;
+  else { const native = [...lv.children].find(o => o.value !== NET); sel.value = native ? native.value : NET; }
+}
+if (synth) { loadVoices(); synth.onvoiceschanged = loadVoices; } else { loadVoices(); }
+
+/* ---------- teksts uz runu ---------- */
+function cleanText(t) { return String(t).replace(/\[emote:\d+:([^\]]+)\]/g, "$1"); }
+function makeSpeakable(m) {
+  let t = cleanText(m.content).replace(/https?:\/\/\S+/gi, "saite").replace(/(.)\1{4,}/g, "$1$1$1").replace(/\s+/g, " ").trim();
+  const max = Number($("maxChars").value) || 200;
+  if (t.length > max) t = t.slice(0, max) + "…";
+  if (!t) return "";
+  const word = isLatvian() ? "saka" : "says";
+  return $("sayName").checked ? `${m.sender.username} ${word}: ${t}` : t;
+}
+function showNow(text) { $("now").classList.toggle("on", !!text); $("nowText").textContent = text || "Pagaidām nekas netiek lasīts"; }
+
+function enqueue(text, row) {
+  if (!$("speak").checked || !text) return;
+  const maxQ = Number($("maxQueue").value) || 4;
+  while (queue.length >= maxQ) queue.shift();
+  queue.push({ text, row });
+  if (!speaking) next();
+}
+function next() {
+  const item = queue.shift();
+  if (!item) { speaking = false; showNow(""); return; }
+  speaking = true;
+  let finished = false;
+  const done = () => { if (finished) return; finished = true; currentAudio = currentDone = null; if (item.row) item.row.classList.remove("speaking"); next(); };
+  if (item.row) item.row.classList.add("speaking");
+  showNow(item.text);
+  if ($("voice").value === NET) {
+    const a = new Audio("/tts?lang=lv&q=" + encodeURIComponent(item.text));
+    a.volume = Number($("volume").value); a.preservesPitch = true; a.playbackRate = Number($("rate").value);
+    a.onended = done;
+    a.onerror = () => { setState("Tiešsaistes balss neatbild. Pārbaudi internetu vai pamēģini vēlreiz pēc brīža.", "bad"); done(); };
+    currentAudio = a; currentDone = done;
+    a.play().catch(() => a.onerror());
+    return;
+  }
+  const u = new SpeechSynthesisUtterance(item.text);
+  const v = voices[Number($("voice").value)];
+  if (v) { u.voice = v; u.lang = v.lang; }
+  u.rate = Number($("rate").value); u.volume = Number($("volume").value);
+  u.onend = done; u.onerror = done;
+  synth.speak(u);
+}
+function stopSpeaking() {
+  queue = []; speaking = false;
+  if (currentAudio) { currentAudio.onended = currentAudio.onerror = null; currentAudio.pause(); currentAudio = currentDone = null; }
+  if (synth) synth.cancel();
+  document.querySelectorAll(".msg.speaking").forEach(r => r.classList.remove("speaking"));
+  showNow("");
+}
+$("skip").onclick = () => { if (currentAudio) { currentAudio.pause(); currentDone(); } else if (synth) synth.cancel(); };
+$("speak").onchange = () => { if (!$("speak").checked) stopSpeaking(); };
+$("test").onclick = () => {
+  stopSpeaking();
+  const wasOn = $("speak").checked; $("speak").checked = true;
+  enqueue(isLatvian() ? "Balss tests. Ziņojumi no augsta līmeņa skatītājiem skanēs šādi." : "Voice test. Messages from high level chatters will sound like this.", null);
+  $("speak").checked = wasOn;
+};
+
+/* ---------- Kick čats ---------- */
+async function resolveRoomId(slug) {
+  const manual = $("roomId").value.trim();
+  if (manual) return manual;
+  try {
+    const j = await (await fetch("/lookup?slug=" + encodeURIComponent(slug))).json();
+    if (j && j.id) return String(j.id);
+  } catch (e) {}
+  return null;
+}
+function levelOf(sender, type) {
+  const id = (sender && sender.identity) || {};
+  if (type === "level") {
+    const all = [...(id.badges_v2 || []), ...(id.badges || [])];
+    for (const b of all) {
+      if (b.selected === false) continue;
+      const label = String(b.name || b.type || b.text || "").toLowerCase();
+      if (!label.includes("level")) continue;
+      let n = Number((b.metadata && b.metadata.level) ?? b.level ?? b.count);
+      if (!n) { const m = String(b.text || b.name || "").match(/\d+/); n = m ? Number(m[0]) : 0; }
+      if (n) return n;
+    }
+    return 0;
+  }
+  const b = (id.badges || []).find(x => x.type === type);
+  return b ? (Number(b.count) || 0) : 0;
+}
+function addMessage(m, level, type) {
+  const feed = $("feed");
+  const w = $("welcome"); if (w) w.remove();
+  const stick = feed.scrollTop + feed.clientHeight >= feed.scrollHeight - 40;
+  const row = document.createElement("div"); row.className = "msg";
+  const badge = document.createElement("span"); badge.className = "lv" + (level >= 50 ? " hi" : "");
+  badge.textContent = (type === "level" ? "Līm. " : type === "subscriber" ? "Mēn. " : "Dāv. ") + level;
+  const body = document.createElement("div");
+  const user = document.createElement("span"); user.className = "user"; user.textContent = m.sender.username;
+  const color = m.sender.identity && m.sender.identity.color; if (color) user.style.color = color;
+  const txt = document.createElement("span"); txt.className = "txt"; txt.textContent = cleanText(m.content);
+  body.append(user, txt); row.append(badge, body); feed.appendChild(row);
+  while (feed.children.length > 300) feed.removeChild(feed.firstChild);
+  if (stick) feed.scrollTop = feed.scrollHeight;
+  enqueue(makeSpeakable(m), row);
+}
+function onChat(m) {
+  if (!m || !m.sender) return;
+  seen++;
+  const type = $("badgeType").value, min = Number($("minLevel").value) || 1;
+  const level = levelOf(m.sender, type);
+  if (level > 0) withBadge++;
+  if (level >= min) { shown++; addMessage(m, level, type); }
+  updateCounts();
+}
+
+function setRunning(on) {
+  running = on;
+  const g = $("go"); g.textContent = on ? "Apturēt" : "Sākt lasīšanu"; g.classList.toggle("stop", on);
+}
+function stopAll() {
+  if (es) { es.close(); es = null; }
+  stopSpeaking(); setRunning(false); setState("Nav savienots");
+}
+async function start() {
+  const slug = $("slug").value.trim().toLowerCase().replace(/^https?:\/\/(www\.)?kick\.com\//, "").replace(/\/.*$/, "");
+  if (!slug) { setState("Vispirms ieraksti kanāla nosaukumu.", "bad"); $("slug").focus(); return; }
+  $("slug").value = slug; save();
+  if (es) es.close(); stopSpeaking();
+  setRunning(true); setState("Meklē čata istabu…");
+  const id = await resolveRoomId(slug);
+  if (!id) {
+    setRunning(false); $("adv").open = true; $("roomId").focus();
+    setState(`Neizdevās atrast čata istabu. Atver kick.com/api/v2/channels/${slug}, atrodi "chatroom" → "id" un ieraksti to laukā zemāk.`, "bad");
+    return;
+  }
+  seen = shown = withBadge = 0; updateCounts();
+  setState("Savienojas…");
+  es = new EventSource("/events?room=" + id);
+  es.onmessage = e => {
+    const m = JSON.parse(e.data);
+    if (m.type === "status") setState(m.text, m.level);
+    else if (m.type === "chat") onChat(m.data);
+  };
+  es.onerror = () => setState("Zudis savienojums ar palīgprogrammu. Pārbaudi, vai terminālis ar server.js vēl darbojas.", "bad");
+}
+$("go").onclick = () => running ? stopAll() : start();
+$("slug").addEventListener("keydown", e => { if (e.key === "Enter" && !running) start(); });
+$("clear").onclick = () => { $("feed").innerHTML = ""; seen = shown = withBadge = 0; updateCounts(); };
+</script>
+</body>
+</html>

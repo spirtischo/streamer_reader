@@ -1,0 +1,22 @@
+{
+  "name": "streamer-reader",
+  "version": "1.0.0",
+  "description": "Streamer Reader - nolasa skaļi Kick čata ziņas no skatītājiem ar augstu līmeni",
+  "author": "Streamer Reader",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "lv.streamerreader.app",
+    "productName": "Streamer Reader",
+    "files": ["main.js", "server.js", "index.html"],
+    "mac": { "target": "dmg", "category": "public.app-category.utilities" },
+    "win": { "target": "nsis" }
+  },
+  "devDependencies": {
+    "electron": "^36.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}
