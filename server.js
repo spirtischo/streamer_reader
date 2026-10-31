@@ -29,10 +29,10 @@ function followChat(room, send, isAlive) {
 
   async function start() {
     if (!isAlive()) return;
-    send({ type: "status", text: "Savienojas ar Kick…" });
+    send({ type: "status", code: "connecting" });
     let b;
     try { b = await bootstrap(); }
-    catch (e) { send({ type: "status", level: "bad", text: `Neizdevās sasniegt Kick (${e.message}). Mēģina vēlreiz…` }); return retry(); }
+    catch (e) { send({ type: "status", level: "bad", code: "bootfail", detail: e.message }); return retry(); }
 
     ws = new WebSocket(b.url);                        // Node sends no Origin header, which Kick accepts
     let lastFrame = Date.now();
@@ -50,9 +50,9 @@ function followChat(room, send, isAlive) {
           const ttl = (m.connect.ttl || 2700) * 800;     // refresh at 80% of token life
           timers.push(setTimeout(refresh, ttl));
         } else if (m.id === 2 && m.subscribe) {
-          send({ type: "status", level: "ok", text: `Savienots. Gaida čata ziņas…` });
+          send({ type: "status", level: "ok", code: "connected" });
         } else if (m.error) {
-          send({ type: "status", level: "bad", text: `Kick noraidīja pieprasījumu: ${JSON.stringify(m.error)}` });
+          send({ type: "status", level: "bad", code: "refused", detail: JSON.stringify(m.error) });
         } else if (m.push && m.push.pub && m.push.pub.data) {
           const d = m.push.pub.data;
           if (d.event === "App\\Events\\ChatMessageEvent") {
@@ -69,7 +69,7 @@ function followChat(room, send, isAlive) {
         timers.push(setTimeout(refresh, 2700 * 800));
       } catch { ws.close(); }
     }
-    ws.onclose = () => { clearInterval(watchdog); clear(); if (isAlive()) { send({ type: "status", level: "bad", text: "Savienojums pārtrūka. Savienojas vēlreiz…" }); retry(); } };
+    ws.onclose = () => { clearInterval(watchdog); clear(); if (isAlive()) { send({ type: "status", level: "bad", code: "lost" }); retry(); } };
     ws.onerror = () => {};
   }
   function retry() { timers.push(setTimeout(start, 3000)); }
